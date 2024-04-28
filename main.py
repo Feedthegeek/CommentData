@@ -7,9 +7,12 @@ License: Personal
 
 This python module reads Reddit comments from Reddit API, sorting by 10 newest posts from a declared subreddit.
 Then, store, sort and write the information and content to a text file.
+To use this script, you'll need to replace the client_id, client_secret, and user_agent with your own
+Reddit API credentials.
 """
 
 import praw
+from praw import exceptions
 from datetime import datetime
 import pytz
 from typing import List
@@ -25,25 +28,35 @@ reddit = praw.Reddit(
 )
 
 """
-Check is subreddit exists and return boolean
+Check is subreddit exists and return subreddit name
 """
 
 
-def check_subreddit():
+def get_valid_subreddit():
     while True:
-        # get subreddit name from input from user
-        subreddit_name = input("Please enter then name of the subreddit you want to scrape: ")
-        # Check if subreddit exists
+        subreddit_name = input("Please enter the name of the subreddit you want to scrape: ")
         try:
-            reddit.subreddit(subreddit_name)
-            print_confirm(subreddit_name)
-            break  #exit if subreddit exists
+            subreddit = reddit.subreddit(subreddit_name)
+            # Fetch subreddit data to ensure it exists
+            if len(list(subreddit.new(limit=1))) > 0:
+                print(f"You've chosen the subreddit: {subreddit_name}")
+                return subreddit.display_name
+            else:
+                print(f"Sorry, the subreddit {subreddit_name} doesn't exist")
+
+        except praw.exceptions.RedditAPIException as e:
+            if e.error_type == "NOT_FOUND":
+                print(f"Sorry, the subreddit '{subreddit_name}' was not found. Please try again.")
+            else:
+                print(f"Sorry, an error occurred: {e}")
         except Exception:
-            print(f"Sorry, {subreddit_name} was not found. Please try again.")
+            print(f"'{subreddit_name}' was not found. Please try again.")
+
 
 
 """
-Obtain comments from subreddit if subreddit is valid
+Obtain comments if subreddit is valid, sorted by 10 newest posts from declared subreddit.
+Return comment data in sorted list.
 """
 
 
@@ -68,7 +81,7 @@ def get_comments(subreddit_name: str) -> List[dict]:
 
 
 """
-Write to file function, converts utc-8 to declared timezone in main
+Write to file function, parses comment data and writes to a text file, formatted.
 """
 
 
@@ -81,7 +94,7 @@ def write_to_file(comments_data, output_file_path: str):
                 outfile.write(f"I.D.: {comment_info['id']}\n")
                 outfile.write(f"Author: {comment_info['author']}\n")
                 outfile.write(f"Text: {comment_info['text']}\n")
-                timestamp = comment_info['timestamp'].strftime('%Y-%m-%d %I:%M %p')
+                timestamp = comment_info['timestamp'].strftime('%Y-%m-%d %I:%M %p')  # Format timestamp to 12HR, XX:XX
                 outfile.write(f"Timestamp: {timestamp}\n")
                 outfile.write(f"URL: {comment_info['link']}\n\n")
     except FileNotFoundError:
@@ -91,15 +104,21 @@ def write_to_file(comments_data, output_file_path: str):
 
 
 """
-Print confirmation of success and filepath
+Obtain filepath from input, pass to write_to_file() function.
 """
 
 
-def print_confirm(subreddit_name: str):
-    print(f"You've chosen the subreddit: {subreddit_name}")
-    print(f"Reading Reddit comments from {subreddit_name}...")
-    output_file_path = fr'D:\AI\{subreddit_name}.txt'
-    comments_data = get_comments(subreddit_name)
+def file_check(comments_data: List[dict]):
+    # Obtain and check input for filepath
+    while True:
+        output_file_path = input(
+            "Please enter the file path where you want to save the comments (default is 'D:\\AI\\{}\\.txt'): ".format(
+                subreddit_name))
+        if output_file_path != "":
+            break
+        else:
+            output_file_path = fr"D:\AI\{subreddit_name}.txt"
+            break
     write_to_file(comments_data, output_file_path)
     print(f"Writing to {output_file_path}...")
     print("Write to file successful.")
@@ -109,10 +128,16 @@ def print_confirm(subreddit_name: str):
 Run program, if subreddit is valid.
 """
 if __name__ == '__main__':
-    est_tz = pytz.timezone('US/Eastern')  # Set to your desired time zone
-    # assign subreddit name
+    est_tz = pytz.timezone('US/Eastern')  # Set to desired time zone
+
     try:
-        check_subreddit()
+        subreddit_name = get_valid_subreddit()
+
+        print(f"Reading Reddit comments from {subreddit_name}...")
+
+        comments_data = get_comments(subreddit_name)
+
+        file_check(comments_data)
 
     except Exception as e:
         print(f"Sorry, an error occurred: {e}.")
